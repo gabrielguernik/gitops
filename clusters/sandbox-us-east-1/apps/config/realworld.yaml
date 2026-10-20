@@ -1,0 +1,24 @@
+# RealWorld API in cluster sandbox-us-east-1.
+# revision is bumped by realworld-app CI on every merge to main: it selects both the chart (deploy/chart at that
+# commit) and the images (realworld-api:<revision>, realworld-api:migrate-<revision>). Rollback = revert the bump.
+repoURL: git@github.com:gabrielguernik/realworld-app.git
+chartPath: deploy/chart
+revision: f7705d553ba84f4211030c4394b852b3e7189090
+namespace: realworld
+values:
+  image:
+    repository: 965140467182.dkr.ecr.us-east-1.amazonaws.com/realworld-api
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 256Mi }
+  secrets:
+    roleArn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-secrets-realworld
+    region: us-east-1
+    app: sandbox/realworld/app
+    db: sandbox/realworld/db-app
+    migrator: sandbox/realworld/db-migrator
+  ingress:
+    host: api.sandbox.gg-incode.click
+    securityGroup: sandbox-us-east-1-alb
+    accessLogs: logs-965140467182-us-east-1/alb/sandbox/us-east-1

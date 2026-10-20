@@ -1,0 +1,59 @@
+# A Sync hook: ArgoCD recreates and runs it on every sync of this Application, after the ExternalSecret (wave -1).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  labels: {{- include "db-bootstrap.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+    checksum/sql: {{ .Files.Get "files/bootstrap.sql" | sha256sum }}
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels: {{- include "db-bootstrap.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999 # postgres user in the official image
+        runAsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: psql
+          image: {{ .Values.image }}
+          command: ["bash", "-c"]
+          args:
+            - >-
+              exec psql -X
+              -v app_user="$APP_USER" -v app_password="$APP_PASSWORD"
+              -v migrator_user="$MIGRATOR_USER" -v migrator_password="$MIGRATOR_PASSWORD"
+              -v app_connection_limit={{ int .Values.appConnectionLimit }}
+              -f /config/bootstrap.sql
+          env:
+            - { name: PGSSLMODE, value: verify-full }
+            - { name: PGSSLROOTCERT, value: /config/rds-ca.pem }
+            - { name: PGCONNECT_TIMEOUT, value: "10" }
+            - { name: PGAPPNAME, value: db-bootstrap }
+            - { name: HOME, value: /tmp }
+          envFrom:
+            - secretRef: { name: db-bootstrap }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - { name: config, mountPath: /config, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap: { name: db-bootstrap }
+        - name: tmp
+          emptyDir: {}

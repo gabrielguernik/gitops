@@ -1,0 +1,19 @@
+# AWS region of the secrets and the database.
+region: us-east-1
+
+# IRSA role of the secrets-reader service account (can read the master secret and the two role secrets only).
+roleArn: ""
+
+# The RDS instance whose RDS-managed master secret is used. The secret is found by its
+# aws:rds:primaryDBInstanceArn tag because its name and ARN change whenever the instance is recreated.
+dbInstanceArn: ""
+
+# Secrets Manager names of the role credentials ({username, password, host, port, dbname}), from the data stack.
+roleSecrets:
+  app: ""
+  migrator: ""
+
+# Maximum concurrent connections of the app role (pods x Prisma connection_limit, plus headroom).
+appConnectionLimit: 20
+
+image: postgres:18-trixie # psql only; same major as the server

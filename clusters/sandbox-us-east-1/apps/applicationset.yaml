@@ -1,0 +1,61 @@
+# App-of-apps for cluster sandbox-us-east-1: one Application per file in config/.
+# Adding an app = adding config/<app>.yaml; removing the file removes the app and its resources.
+#
+# Each config file provides:
+#   repoURL    git repo holding the app's Helm chart
+#   chartPath  path of the chart in that repo
+#   revision   git revision of the chart; also passed to the chart as .Values.revision (the image tag, for apps
+#              whose CI builds images from the same commit)
+#   namespace  destination namespace (created by ArgoCD, Pod Security Standard "restricted")
+#   values     Helm values for this cluster
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"] # a missing key in a config file fails the generator instead of rendering ""
+  generators:
+    - git:
+        repoURL: git@github.com:gabrielguernik/gitops.git
+        revision: main
+        files:
+          - path: clusters/sandbox-us-east-1/apps/config/*.yaml
+  template:
+    metadata:
+      name: '{{ trimSuffix ".yaml" .path.filename }}'
+      finalizers: [resources-finalizer.argocd.argoproj.io]
+    spec:
+      project: apps
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      source:
+        repoURL: "{{ .repoURL }}"
+        targetRevision: "{{ .revision }}"
+        path: "{{ .chartPath }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: [CreateNamespace=true, ServerSideApply=true]
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/warn: restricted
+            # ALB targets are pod IPs: a new pod only counts as ready once the ALB reports it healthy, so a
+            # rollout never removes the old pods before the new ones receive traffic.
+            elbv2.k8s.aws/pod-readiness-gate-inject: enabled
+        # On a fresh cluster an app can start before the platform is ready (CRDs, database roles); retry until it is.
+        retry:
+          limit: 10
+          backoff: { duration: 30s, factor: 2, maxDuration: 5m }
+  # The plain template can only substitute strings; the patch inserts the config file's values block as YAML.
+  templatePatch: |
+    spec:
+      source:
+        helm:
+          valuesObject:
+            revision: {{ .revision | quote }}
+            {{- with .values }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}

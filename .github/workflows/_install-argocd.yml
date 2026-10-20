@@ -1,0 +1,103 @@
+# Reusable: installs or upgrades ArgoCD in one cluster and applies its two root Applications.
+#
+# The cluster's API is private, so the job reaches it through the bastion with a Session Manager tunnel
+# (scripts/eks-tunnel.sh). It runs in a GitHub environment named after the cluster: the OIDC subject is then
+# ...:environment:<cluster>, the only subject role ci/argocd-<cluster> trusts, so the environment's protection
+# rules (branch main only; reviewers for prod) gate every install.
+name: install-argocd
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        description: Environment, e.g. sandbox
+        type: string
+        required: true
+      region:
+        description: AWS region of the cluster
+        type: string
+        required: true
+      aws_account_id:
+        type: string
+        required: true
+      argocd_chart_version:
+        description: argo-cd Helm chart version
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  SSM_PLUGIN_VERSION: 1.2.835.0
+
+jobs:
+  install:
+    name: ArgoCD ${{ inputs.env }}-${{ inputs.region }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env }}-${{ inputs.region }}
+    concurrency:
+      group: argocd-${{ inputs.env }}-${{ inputs.region }}
+      cancel-in-progress: false
+    timeout-minutes: 20
+    env:
+      CLUSTER: ${{ inputs.env }}-${{ inputs.region }}
+      AWS_REGION: ${{ inputs.region }}
+      SESSION_NAME: argocd-${{ inputs.env }}-${{ inputs.region }}-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.aws_account_id }}:role/ci/argocd-${{ env.CLUSTER }}
+          role-session-name: ${{ env.SESSION_NAME }} # session IDs start with this; the role may only end its own
+          aws-region: ${{ inputs.region }}
+
+      - name: Install the Session Manager plugin
+        run: |
+          curl -fsSL -o /tmp/ssm.deb \
+            "https://s3.amazonaws.com/session-manager-downloads/plugin/${SSM_PLUGIN_VERSION}/ubuntu_64bit/session-manager-plugin.deb"
+          sudo dpkg -i /tmp/ssm.deb
+          session-manager-plugin --version
+
+      - name: Open the tunnel to the Kubernetes API
+        run: |
+          scripts/eks-tunnel.sh "${{ inputs.env }}" "${{ inputs.region }}" > /tmp/tunnel.env
+          cat /tmp/tunnel.env >> "$GITHUB_ENV"   # KUBECONFIG and TUNNEL_PID for later steps (no secrets)
+
+      - name: ArgoCD repository credentials (from Secrets Manager)
+        run: |
+          kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+          for repo in gitops realworld-app; do
+            aws secretsmanager get-secret-value --secret-id "${{ inputs.env }}/argocd/repo-${repo}" \
+              --query SecretString --output text \
+            | jq '{apiVersion: "v1", kind: "Secret",
+                   metadata: {name: "repo-\($repo)", namespace: "argocd",
+                              labels: {"argocd.argoproj.io/secret-type": "repository"}},
+                   stringData: {type: "git", url: .url, sshPrivateKey: .sshPrivateKey}}' --arg repo "$repo" \
+            | kubectl apply -f - > /dev/null
+            echo "repo-${repo}: applied"
+          done
+
+      - name: Install or upgrade ArgoCD
+        run: |
+          helm upgrade --install argocd argo-cd \
+            --repo https://argoproj.github.io/argo-helm --version "${{ inputs.argocd_chart_version }}" \
+            --namespace argocd -f "clusters/${CLUSTER}/argocd/values.yaml" \
+            --wait --timeout 10m
+          kubectl -n argocd get deploy,statefulset
+
+      - name: Root Applications
+        run: |
+          kubectl apply -f "clusters/${CLUSTER}/argocd/roots.yaml"
+          kubectl -n argocd get applications
+
+      - name: Close the tunnel
+        if: always()
+        run: |
+          [[ -n "${TUNNEL_PID:-}" ]] && kill "$TUNNEL_PID" 2>/dev/null || true
+          for s in $(aws ssm describe-sessions --state Active \
+                       --query "Sessions[?starts_with(SessionId, '${SESSION_NAME}')].SessionId" --output text); do
+            aws ssm terminate-session --session-id "$s" > /dev/null && echo "terminated $s"
+          done

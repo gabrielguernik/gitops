@@ -1,0 +1,54 @@
+# AWS Load Balancer Controller: turns Ingresses into ALBs.
+# IMDS is unreachable from pods (hop limit 1), so region and VPC are set explicitly. The VPC is found by its Name
+# tag, not its ID, so a network rebuild needs no change here. The controller never creates or edits security groups:
+# Ingresses name the Terraform-owned sandbox-us-east-1-alb, and sg-app already allows the ALB.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: 3.6.0 # IAM policy vendored in infra/modules/platform/policies must match this version
+    helm:
+      valuesObject:
+        clusterName: sandbox-us-east-1
+        region: us-east-1
+        vpcTags:
+          Name: sandbox-us-east-1-vpc
+        replicaCount: 1
+        serviceAccount:
+          name: aws-load-balancer-controller
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-aws-load-balancer-controller
+        enableBackendSecurityGroup: false
+        enableServiceMutatorWebhook: false
+        defaultTargetType: ip
+        resources:
+          requests: { cpu: 50m, memory: 128Mi }
+          limits: { memory: 256Mi }
+  # The chart generates a new self-signed webhook certificate on every render (ArgoCD can't use Helm's lookup);
+  # keep the first one instead of re-syncing forever.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: aws-load-balancer-tls
+      jsonPointers: [/data]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true, RespectIgnoreDifferences=true]

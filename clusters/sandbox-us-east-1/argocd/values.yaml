@@ -1,0 +1,57 @@
+# ArgoCD Helm values for cluster sandbox-us-east-1.
+# Applied by the install pipeline (.github/workflows/argocd.yml), never by ArgoCD itself: the pipeline owns this release.
+# Chart version: see CHART_VERSION in the cluster's job in argocd.yml.
+
+global:
+  domain: argocd.sandbox.invalid # no ingress; the UI is reached with kubectl port-forward through the bastion tunnel
+
+configs:
+  params:
+    server.insecure: false
+  cm:
+    timeout.reconciliation: 60s
+    # Applications deployed by the platform root wait for each other's health in sync waves only if ArgoCD can
+    # assess an Application's health; this check was removed from the defaults in ArgoCD 1.8.
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil and obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+      return hs
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+# Single replicas: the sandbox runs on two t3.medium nodes. Prod: HA values (redis-ha, 2+ replicas per component).
+controller:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 384Mi }
+    limits: { memory: 1Gi }
+server:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+repoServer:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { memory: 512Mi }
+applicationSet:
+  replicas: 1
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { memory: 256Mi }
+redis:
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { memory: 128Mi }

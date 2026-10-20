@@ -1,0 +1,7 @@
+apiVersion: v2
+name: db-bootstrap
+description: >-
+  Creates the PostgreSQL roles workloads use (a migrator that owns the schema, an app role with DML only) as the
+  RDS master user, so no workload ever gets the master password. Idempotent; re-runs on every sync.
+type: application
+version: 1.0.0 # released as git tag db-bootstrap-v<version> (e.g. db-bootstrap-v1.0.0); clusters pin the tag

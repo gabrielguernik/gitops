@@ -1,0 +1,30 @@
+# Reloader: rolls a Deployment when a Secret or ConfigMap it uses changes (opt-in per workload with
+# reloader.stakater.com/auto: "true"). Environment variables in running pods never update on their own.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reloader
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: reloader
+  source:
+    repoURL: https://stakater.github.io/stakater-charts
+    chart: reloader
+    targetRevision: 2.2.18
+    helm:
+      valuesObject:
+        reloader:
+          watchGlobally: true
+          deployment:
+            resources:
+              requests: { cpu: 10m, memory: 32Mi }
+              limits: { memory: 128Mi }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

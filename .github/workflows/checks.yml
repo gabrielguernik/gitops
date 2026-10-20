@@ -1,0 +1,50 @@
+# Checks on every PR and on main:
+#   lint        - all YAML parses; db-bootstrap chart lints; every app config has the keys the ApplicationSet needs
+#   references  - every AWS resource a cluster folder hardcodes still exists (scripts/check-cluster-config.sh),
+#                 with the read-only role ci/gitops-check
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # helm and yq are preinstalled on GitHub-hosted runners.
+      - name: YAML parses
+        run: find clusters charts -name '*.yaml' -not -path '*/templates/*' -print0 | xargs -0 -n1 yq -e 'true' > /dev/null
+      - name: db-bootstrap chart
+        run: |
+          helm lint charts/db-bootstrap --set roleArn=x,dbInstanceArn=y,roleSecrets.app=a,roleSecrets.migrator=m
+      - name: App configs have the generator's keys
+        run: |
+          rc=0
+          for f in clusters/*/apps/config/*.yaml; do
+            for k in repoURL chartPath revision namespace values; do
+              yq -e "has(\"$k\")" "$f" > /dev/null || { echo "$f: missing $k"; rc=1; }
+            done
+          done
+          exit $rc
+
+  references:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        cluster: [sandbox-us-east-1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::965140467182:role/ci/gitops-check
+          aws-region: us-east-1
+      - run: scripts/check-cluster-config.sh ${{ matrix.cluster }}

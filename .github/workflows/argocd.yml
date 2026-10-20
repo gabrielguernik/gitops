@@ -1,0 +1,32 @@
+# Installs or upgrades ArgoCD in every cluster, one job per cluster.
+# Adding a cluster = adding a job below (plus its clusters/<cluster>/ folder, its GitHub environment, and its
+# ci/argocd-<cluster> role and EKS access entry in the infra repo).
+#
+# Runs when a cluster's argocd/ folder or this pipeline changes, weekly (to undo manual changes to ArgoCD itself:
+# ArgoCD doesn't manage its own release), and on demand.
+name: argocd
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "clusters/*/argocd/**"
+      - "scripts/eks-tunnel.sh"
+      - ".github/workflows/argocd.yml"
+      - ".github/workflows/_install-argocd.yml"
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sandbox-us-east-1:
+    uses: ./.github/workflows/_install-argocd.yml
+    with:
+      env: sandbox
+      region: us-east-1
+      aws_account_id: "965140467182"
+      argocd_chart_version: 10.10.5 # ArgoCD v3.5.5

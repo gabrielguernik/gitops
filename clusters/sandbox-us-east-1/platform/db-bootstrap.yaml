@@ -1,0 +1,36 @@
+# db-bootstrap: creates the PostgreSQL roles realworld_migrator (owns the schema) and realworld_app (DML only)
+# as the RDS master user. The master password exists only in namespace db-admin; no workload ever gets it.
+# Runs after the controllers (wave -1) and before any app; re-runs on every sync of this Application.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: db-bootstrap
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: db-admin
+  source:
+    repoURL: git@github.com:gabrielguernik/gitops.git
+    path: charts/db-bootstrap
+    targetRevision: db-bootstrap-v1.0.0 # charts shared by clusters are pinned per cluster by git tag
+    helm:
+      valuesObject:
+        region: us-east-1
+        roleArn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-secrets-db-admin
+        dbInstanceArn: arn:aws:rds:us-east-1:965140467182:db:sandbox-us-east-1-postgres
+        roleSecrets:
+          app: sandbox/realworld/db-app
+          migrator: sandbox/realworld/db-migrator
+        appConnectionLimit: 20
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/warn: restricted
