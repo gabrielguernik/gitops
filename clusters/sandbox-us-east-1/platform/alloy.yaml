@@ -105,6 +105,9 @@ spec:
               }
 
               // The API's ALB, found by the tags the load balancer controller puts on it (its ID changes on rebuild).
+              // Each scrape returns the latest datapoint within "length". The 5xx metrics only have datapoints in
+              // minutes with errors, so a longer length would repeat the last error minute long after errors stop;
+              // 2m covers CloudWatch's publishing delay while repeating a datapoint at most once.
               prometheus.exporter.cloudwatch "alb" {
                 sts_region = "us-east-1"
 
@@ -126,19 +129,19 @@ spec:
                     name       = "RequestCount"
                     statistics = ["Sum"]
                     period     = "1m"
-                    length     = "5m"
+                    length     = "2m"
                   }
                   metric {
                     name       = "HTTPCode_ELB_5XX_Count"
                     statistics = ["Sum"]
                     period     = "1m"
-                    length     = "5m"
+                    length     = "2m"
                   }
                   metric {
                     name       = "HTTPCode_Target_5XX_Count"
                     statistics = ["Sum"]
                     period     = "1m"
-                    length     = "5m"
+                    length     = "2m"
                   }
                 }
               }
