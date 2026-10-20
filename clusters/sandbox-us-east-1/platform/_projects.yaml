@@ -12,6 +12,7 @@ spec:
   sourceRepos:
     - git@github.com:gabrielguernik/gitops.git
     - https://charts.external-secrets.io
+    - https://charts.jetstack.io
     - https://aws.github.io/eks-charts
     - https://kubernetes-sigs.github.io/external-dns
     - https://stakater.github.io/stakater-charts

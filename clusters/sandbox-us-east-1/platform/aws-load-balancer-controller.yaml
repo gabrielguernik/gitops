@@ -30,19 +30,15 @@ spec:
           name: aws-load-balancer-controller
           annotations:
             eks.amazonaws.com/role-arn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-aws-load-balancer-controller
+        enableCertManager: true # webhook certificate from cert-manager (see cert-manager.yaml)
         enableBackendSecurityGroup: false
         enableServiceMutatorWebhook: false
         defaultTargetType: ip
         resources:
           requests: { cpu: 50m, memory: 128Mi }
           limits: { memory: 256Mi }
-  # The chart generates a new self-signed webhook certificate on every render (ArgoCD can't use Helm's lookup);
-  # keep the first one instead of re-syncing forever.
+  # cert-manager's cainjector writes the CA into the webhook configurations.
   ignoreDifferences:
-    - group: ""
-      kind: Secret
-      name: aws-load-balancer-tls
-      jsonPointers: [/data]
     - group: admissionregistration.k8s.io
       kind: MutatingWebhookConfiguration
       jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]

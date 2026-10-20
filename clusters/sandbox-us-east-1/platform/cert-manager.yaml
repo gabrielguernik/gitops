@@ -1,0 +1,50 @@
+# cert-manager: issues in-cluster certificates. Used for the AWS Load Balancer Controller's webhook certificate,
+# whose chart otherwise generates a new random CA on every render (ArgoCD renders charts repeatedly, so the
+# certificate and the CA registered in the webhook configurations drift apart and every Ingress is rejected).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-6" # before the Load Balancer Controller, which creates a Certificate
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.21.2
+    helm:
+      valuesObject:
+        crds:
+          enabled: true
+          keep: true
+        replicaCount: 1
+        startupapicheck:
+          enabled: false # a Helm test hook; ArgoCD health checks cover it
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+          limits: { memory: 192Mi }
+        webhook:
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 96Mi }
+        cainjector:
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 192Mi }
+  # cert-manager's cainjector writes the CA into its own webhook configurations at runtime.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]
