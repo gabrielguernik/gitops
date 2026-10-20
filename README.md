@@ -26,6 +26,7 @@ clusters/
       roots.yaml             # the two root Applications: platform and apps
     platform/                # one hand-written Application per platform component
       _projects.yaml         # AppProjects "platform" and "apps"
+      cert-manager.yaml      # webhook certificates (the Load Balancer Controller's)
       external-secrets.yaml
       aws-load-balancer-controller.yaml
       external-dns.yaml
@@ -59,8 +60,8 @@ EKS, RDS, IAM roles   ──▶  helm upgrade argocd                ──▶  r
    and applies `roots.yaml`. It runs when a cluster's `argocd/` folder changes, weekly (to undo manual changes:
    ArgoCD doesn't manage its own release), and on demand.
 2. **The `platform` root** syncs `clusters/<cluster>/platform/`. Every component is an explicit Application with
-   its chart version and its configuration written out in the file. Sync waves order them: projects (-10), then
-   controllers (-5), then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
+   its chart version and its configuration written out in the file. Sync waves order them: projects (-10), cert-manager
+   (-6), then the controllers (-5), then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
    for the previous one to be healthy.
 3. **The `apps` root** syncs only `apps/applicationset.yaml`. The ApplicationSet's git files generator turns each
    `apps/config/<app>.yaml` into an Application named `<app>`, in the AppProject `apps`.
