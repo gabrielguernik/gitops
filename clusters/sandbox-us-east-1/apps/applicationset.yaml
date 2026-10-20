@@ -57,5 +57,5 @@ spec:
           valuesObject:
             revision: {{ .revision | quote }}
             {{- with .values }}
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml . | nindent 10 }}
             {{- end }}
