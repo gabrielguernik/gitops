@@ -1,0 +1,32 @@
+# monitoring-config: the monitoring namespace's secrets plumbing (secrets-reader service account with IRSA, a
+# SecretStore, and the ExternalSecret with Grafana's admin credentials). First of the observability Applications,
+# and the one that creates the monitoring namespace (PSS restricted).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  source:
+    repoURL: git@github.com:gabrielguernik/gitops.git
+    path: charts/monitoring-config
+    targetRevision: monitoring-config-v1.0.0 # charts shared by clusters are pinned per cluster by git tag
+    helm:
+      valuesObject:
+        region: us-east-1
+        roleArn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-secrets-monitoring
+        grafanaSecret: sandbox/monitoring/grafana
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/warn: restricted

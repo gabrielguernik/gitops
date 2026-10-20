@@ -1,0 +1,7 @@
+apiVersion: v2
+name: monitoring-config
+description: >-
+  Supporting resources for the monitoring namespace: the secrets-reader service account (IRSA), its SecretStore, and
+  the ExternalSecret with Grafana's admin credentials.
+type: application
+version: 1.0.0 # released as git tag monitoring-config-v<version>; clusters pin the tag

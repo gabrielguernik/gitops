@@ -1,0 +1,27 @@
+# Grafana dashboards, as ConfigMaps that Grafana's sidecar loads (gitops charts/grafana-dashboards). A separate
+# Application from Grafana, so a dashboard change never re-syncs or restarts Grafana.
+# To change a dashboard: edit a copy in Grafana, export the JSON, commit it to the chart, tag a new chart version
+# and bump targetRevision here.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-dashboards
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  source:
+    repoURL: git@github.com:gabrielguernik/gitops.git
+    path: charts/grafana-dashboards
+    targetRevision: grafana-dashboards-v1.0.0
+    helm:
+      valuesObject:
+        cluster: sandbox-us-east-1
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]

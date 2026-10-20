@@ -1,0 +1,100 @@
+# Grafana: dashboards over Amazon Managed Prometheus (app metrics), CloudWatch (ALB, RDS, Valkey, NAT) and CloudWatch
+# Logs (container logs). Private: open it with a port-forward through the bastion tunnel (README).
+#
+# Everything is provisioned (data sources here, dashboards from the grafana-dashboards Application), and there is
+# no persistence: UI changes are lost on restart by design. The admin password is in Secrets Manager
+# sandbox/monitoring/grafana. The AMP workspace ID is hardcoded: see alloy.yaml.
+#
+# In production Grafana would run in a separate management cluster, so a cluster that goes down can still be
+# observed.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  source:
+    repoURL: https://grafana-community.github.io/helm-charts # the chart moved here from grafana/helm-charts
+    chart: grafana
+    targetRevision: 14.0.1
+    helm:
+      valuesObject:
+        fullnameOverride: grafana
+        replicas: 1
+        annotations:
+          reloader.stakater.com/auto: "true" # restart when the admin Secret changes
+        serviceAccount:
+          create: true
+          name: grafana
+          annotations:
+            eks.amazonaws.com/role-arn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-grafana
+        admin:
+          existingSecret: grafana-admin
+          userKey: admin-user
+          passwordKey: admin-password
+        env:
+          AWS_REGION: us-east-1 # IMDS is unreachable (hop limit 1)
+        persistence: { enabled: false }
+        testFramework: { enabled: false }
+        resources:
+          requests: { cpu: 50m, memory: 192Mi }
+          limits: { memory: 512Mi }
+        # SigV4 for AMP comes from this plugin (the core Prometheus data source no longer supports SigV4 since Grafana 13).
+        plugins:
+          - grafana-amazonprometheus-datasource@3.2.0
+        grafana.ini:
+          analytics: { reporting_enabled: false, check_for_updates: false, check_for_plugin_updates: false }
+          auth: { sigv4_auth_enabled: true }
+          auth.anonymous: { enabled: false }
+          users: { allow_sign_up: false }
+          aws:
+            allowed_auth_providers: default # the SDK chain: IRSA web identity first
+            assume_role_enabled: false
+          log: { mode: console }
+          log.console: { format: json }
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              # Fixed UIDs: dashboards reference data sources by UID.
+              - name: Amazon Managed Prometheus
+                uid: amp
+                type: grafana-amazonprometheus-datasource
+                access: proxy
+                url: https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-25e79335-dbf5-4520-a73b-084b8e83a935
+                isDefault: true
+                editable: false
+                jsonData:
+                  httpMethod: POST
+                  sigV4Auth: true
+                  sigV4AuthType: default
+                  sigV4Region: us-east-1
+                  timeInterval: 30s # Alloy's scrape interval; $__rate_interval derives from it
+                  manageAlerts: false # AMP's rules are read-only here; they are managed in infra
+              - name: CloudWatch
+                uid: cloudwatch
+                type: cloudwatch
+                editable: false
+                jsonData:
+                  authType: default
+                  defaultRegion: us-east-1
+        sidecar:
+          dashboards:
+            enabled: true
+            label: grafana_dashboard
+            labelValue: "1"
+            folderAnnotation: grafana_folder # set by the grafana-dashboards chart
+            provider:
+              foldersFromFilesStructure: true
+              allowUiUpdates: false
+          datasources: { enabled: false }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]

@@ -1,0 +1,4 @@
+# Cluster name (<env>-<region>). Dashboards reference AWS resources by stable names derived from it
+# (<cluster>-postgres, <cluster>-valkey-*, /eks/<cluster>/containers): the JSON files use the placeholder
+# __CLUSTER__, replaced at render time.
+cluster: ""

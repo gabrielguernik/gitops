@@ -1,5 +1,5 @@
 # Checks on every PR and on main:
-#   lint        - all YAML parses; db-bootstrap chart lints; every app config has the keys the ApplicationSet needs
+#   lint        - all YAML parses; the gitops charts lint; dashboards are valid JSON; every app config has the keys the ApplicationSet needs
 #   references  - every AWS resource a cluster folder hardcodes still exists (scripts/check-cluster-config.sh),
 #                 with the read-only role ci/gitops-check
 name: checks
@@ -20,9 +20,16 @@ jobs:
       # helm and yq are preinstalled on GitHub-hosted runners.
       - name: YAML parses
         run: find clusters charts -name '*.yaml' -not -path '*/templates/*' -print0 | xargs -0 -n1 yq -e 'true' > /dev/null
-      - name: db-bootstrap chart
+      - name: gitops charts
         run: |
           helm lint charts/db-bootstrap --set roleArn=x,dbInstanceArn=y,roleSecrets.app=a,roleSecrets.migrator=m
+          helm lint charts/monitoring-config --set roleArn=x,grafanaSecret=y
+          helm lint charts/grafana-dashboards --set cluster=c
+      - name: Dashboards are valid JSON with a unique uid
+        run: |
+          for f in charts/grafana-dashboards/dashboards/*/*.json; do jq -e '.uid and .title' "$f" > /dev/null || { echo "$f"; exit 1; }; done
+          dups=$(jq -r .uid charts/grafana-dashboards/dashboards/*/*.json | sort | uniq -d)
+          [ -z "$dups" ] || { echo "duplicate dashboard uid: $dups"; exit 1; }
       - name: ApplicationSet templatePatch renders valid YAML for every app config
         # Renders the patch with Helm's engine (same Go templates and Sprig functions as ArgoCD; .x → .Values.x).
         run: |

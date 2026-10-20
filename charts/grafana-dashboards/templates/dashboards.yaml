@@ -1,0 +1,21 @@
+{{- if not .Values.cluster }}
+{{- fail "cluster is required" }}
+{{- end }}
+{{- range $path, $_ := .Files.Glob "dashboards/*/*.json" }}
+{{- $folder := base (dir $path) }}
+{{- $file := base $path }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ lower $folder }}-{{ trimSuffix ".json" $file }}
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: grafana-dashboards
+    app.kubernetes.io/version: {{ $.Chart.Version | quote }}
+  annotations:
+    grafana_folder: {{ $folder | quote }}
+data:
+  {{ $file }}: |
+{{ $.Files.Get $path | replace "__CLUSTER__" $.Values.cluster | indent 4 }}
+{{- end }}

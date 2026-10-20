@@ -1,0 +1,8 @@
+# AWS region of the secrets.
+region: us-east-1
+
+# IRSA role of the secrets-reader service account (reads <env>/monitoring/* only).
+roleArn: ""
+
+# Secrets Manager name of Grafana's admin credentials ({admin-user, admin-password}), from the monitoring stack.
+grafanaSecret: ""
