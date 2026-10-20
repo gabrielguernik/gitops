@@ -4,4 +4,4 @@ description: >-
   Grafana dashboards as ConfigMaps, loaded by Grafana's dashboard sidecar. One ConfigMap per JSON file in
   dashboards/<Folder>/; the directory name is the Grafana folder.
 type: application
-version: 1.0.1 # released as git tag grafana-dashboards-v<version>; clusters pin the tag
+version: 1.0.2 # released as git tag grafana-dashboards-v<version>; clusters pin the tag

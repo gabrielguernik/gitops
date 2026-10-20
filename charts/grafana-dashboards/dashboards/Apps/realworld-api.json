@@ -31,7 +31,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "Is it the API? (alert thresholds: 5xx > 5% for 5m, p95 > 500 ms for 10m)",
+      "title": "Is it the API? (alerts: ALB 5xx ratio > 5% for 5m, p95 > 500 ms for 10m)",
       "collapsed": false,
       "panels": [],
       "id": 1,
@@ -45,7 +45,7 @@
     {
       "type": "stat",
       "title": "Requests/s",
-      "description": "",
+      "description": "User requests the API served (no probes).",
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
         "uid": "amp"
@@ -57,7 +57,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "sum(rate(http_request_duration_seconds_count{service=\"realworld-api\"}[$__rate_interval]))",
+          "expr": "sum(rate(http_request_duration_seconds_count{service=\"realworld-api\", route!~\"/healthz|/readyz|/metrics\"}[$__rate_interval]))",
           "legendFormat": "",
           "range": true,
           "instant": false
@@ -91,14 +91,14 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 6,
+        "w": 5,
         "h": 4
       }
     },
     {
       "type": "stat",
-      "title": "5xx ratio",
-      "description": "",
+      "title": "5xx ratio at the ALB (what users see)",
+      "description": "Last 5 minutes, from CloudWatch (1-2 min behind). Includes the 503s the ALB answers itself when no pod is ready. The error alert uses this.",
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
         "uid": "amp"
@@ -110,7 +110,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "(sum(rate(http_request_duration_seconds_count{service=\"realworld-api\", status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_request_duration_seconds_count{service=\"realworld-api\"}[$__rate_interval]))",
+          "expr": "((sum(sum_over_time(aws_applicationelb_httpcode_elb_5_xx_count_sum[5m])) or vector(0)) + (sum(sum_over_time(aws_applicationelb_httpcode_target_5_xx_count_sum[5m])) or vector(0))) / (sum(sum_over_time(aws_applicationelb_request_count_sum[5m])) + (sum(sum_over_time(aws_applicationelb_httpcode_elb_5_xx_count_sum[5m])) or vector(0)))",
           "legendFormat": "",
           "range": true,
           "instant": false
@@ -150,9 +150,70 @@
       },
       "id": 3,
       "gridPos": {
-        "x": 6,
+        "x": 5,
         "y": 1,
-        "w": 6,
+        "w": 5,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "5xx ratio in the API",
+      "description": "Errors the API itself returned. ALB errors without API errors: no pod is ready.",
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp"
+          },
+          "expr": "(sum(rate(http_request_duration_seconds_count{service=\"realworld-api\", route!~\"/healthz|/readyz|/metrics\", status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_request_duration_seconds_count{service=\"realworld-api\", route!~\"/healthz|/readyz|/metrics\"}[$__rate_interval]))",
+          "legendFormat": "",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 10,
+        "y": 1,
+        "w": 5,
         "h": 4
       }
     },
@@ -171,7 +232,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!=\"unmatched\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!~\"unmatched|/healthz|/readyz|/metrics\"}[$__rate_interval])))",
           "legendFormat": "",
           "range": true,
           "instant": false
@@ -209,18 +270,18 @@
           ]
         }
       },
-      "id": 4,
+      "id": 5,
       "gridPos": {
-        "x": 12,
+        "x": 15,
         "y": 1,
-        "w": 6,
+        "w": 5,
         "h": 4
       }
     },
     {
       "type": "stat",
       "title": "Pods scraped",
-      "description": "Pods whose /metrics Alloy scraped successfully",
+      "description": "Pods whose /metrics Alloy scraped successfully (scraped even when not ready).",
       "datasource": {
         "type": "grafana-amazonprometheus-datasource",
         "uid": "amp"
@@ -270,12 +331,91 @@
           ]
         }
       },
-      "id": 5,
+      "id": 6,
       "gridPos": {
-        "x": 18,
+        "x": 20,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Load balancer: requests and 5xx per minute",
+      "description": "CloudWatch, per minute, copied into AMP by Alloy.",
+      "datasource": {
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "amp"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp"
+          },
+          "expr": "sum(aws_applicationelb_request_count_sum)",
+          "legendFormat": "requests",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp"
+          },
+          "expr": "sum(aws_applicationelb_httpcode_elb_5_xx_count_sum)",
+          "legendFormat": "5xx from the ALB (no ready pod, timeouts)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "amp"
+          },
+          "expr": "sum(aws_applicationelb_httpcode_target_5_xx_count_sum)",
+          "legendFormat": "5xx from the API",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 7
       }
     },
     {
@@ -283,10 +423,10 @@
       "title": "Which route? Errors or latency?",
       "collapsed": false,
       "panels": [],
-      "id": 6,
+      "id": 8,
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 12,
         "w": 24,
         "h": 1
       }
@@ -306,7 +446,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "sum by (route) (rate(http_request_duration_seconds_count{service=\"realworld-api\"}[$__rate_interval]))",
+          "expr": "sum by (route) (rate(http_request_duration_seconds_count{service=\"realworld-api\", route!~\"/healthz|/readyz|/metrics\"}[$__rate_interval]))",
           "legendFormat": "{{route}}",
           "range": true,
           "instant": false
@@ -340,10 +480,10 @@
           "sort": "desc"
         }
       },
-      "id": 7,
+      "id": 9,
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 13,
         "w": 12,
         "h": 8
       }
@@ -363,7 +503,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "sum by (route, status_code) (rate(http_request_duration_seconds_count{service=\"realworld-api\", status_code=~\"[45]..\"}[$__rate_interval]))",
+          "expr": "sum by (route, status_code) (rate(http_request_duration_seconds_count{service=\"realworld-api\", route!~\"/healthz|/readyz|/metrics\", status_code=~\"[45]..\"}[$__rate_interval]))",
           "legendFormat": "{{status_code}} {{route}}",
           "range": true,
           "instant": false
@@ -397,10 +537,10 @@
           "sort": "desc"
         }
       },
-      "id": 8,
+      "id": 10,
       "gridPos": {
         "x": 12,
-        "y": 6,
+        "y": 13,
         "w": 12,
         "h": 8
       }
@@ -420,7 +560,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!=\"unmatched\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!~\"unmatched|/healthz|/readyz|/metrics\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "range": true,
           "instant": false
@@ -431,7 +571,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!=\"unmatched\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!~\"unmatched|/healthz|/readyz|/metrics\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "range": true,
           "instant": false
@@ -442,7 +582,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!=\"unmatched\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!~\"unmatched|/healthz|/readyz|/metrics\"}[$__rate_interval])))",
           "legendFormat": "p99",
           "range": true,
           "instant": false
@@ -476,10 +616,10 @@
           "sort": "desc"
         }
       },
-      "id": 9,
+      "id": 11,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 21,
         "w": 12,
         "h": 8
       }
@@ -499,7 +639,7 @@
             "type": "grafana-amazonprometheus-datasource",
             "uid": "amp"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!=\"unmatched\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{service=\"realworld-api\", route!~\"unmatched|/healthz|/readyz|/metrics\"}[$__rate_interval])))",
           "legendFormat": "{{route}}",
           "range": true,
           "instant": false
@@ -533,10 +673,10 @@
           "sort": "desc"
         }
       },
-      "id": 10,
+      "id": 12,
       "gridPos": {
         "x": 12,
-        "y": 14,
+        "y": 21,
         "w": 12,
         "h": 8
       }
@@ -546,10 +686,10 @@
       "title": "Dependencies as the API sees them",
       "collapsed": false,
       "panels": [],
-      "id": 11,
+      "id": 13,
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 29,
         "w": 24,
         "h": 1
       }
@@ -603,10 +743,10 @@
           "sort": "desc"
         }
       },
-      "id": 12,
+      "id": 14,
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 30,
         "w": 8,
         "h": 8
       }
@@ -671,10 +811,10 @@
           "sort": "desc"
         }
       },
-      "id": 13,
+      "id": 15,
       "gridPos": {
         "x": 8,
-        "y": 23,
+        "y": 30,
         "w": 8,
         "h": 8
       }
@@ -728,10 +868,10 @@
           "sort": "desc"
         }
       },
-      "id": 14,
+      "id": 16,
       "gridPos": {
         "x": 16,
-        "y": 23,
+        "y": 30,
         "w": 8,
         "h": 8
       }
@@ -741,10 +881,10 @@
       "title": "Pods",
       "collapsed": false,
       "panels": [],
-      "id": 15,
+      "id": 17,
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 38,
         "w": 24,
         "h": 1
       }
@@ -798,10 +938,10 @@
           "sort": "desc"
         }
       },
-      "id": 16,
+      "id": 18,
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 39,
         "w": 8,
         "h": 8
       }
@@ -855,10 +995,10 @@
           "sort": "desc"
         }
       },
-      "id": 17,
+      "id": 19,
       "gridPos": {
         "x": 8,
-        "y": 32,
+        "y": 39,
         "w": 8,
         "h": 8
       }
@@ -912,10 +1052,10 @@
           "sort": "desc"
         }
       },
-      "id": 18,
+      "id": 20,
       "gridPos": {
         "x": 16,
-        "y": 32,
+        "y": 39,
         "w": 8,
         "h": 8
       }
@@ -925,12 +1065,53 @@
       "title": "Which requests? (CloudWatch Logs; search one reqId with the saved query \"Request by reqId\")",
       "collapsed": false,
       "panels": [],
-      "id": 19,
+      "id": 21,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 47,
         "w": 24,
         "h": 1
+      }
+    },
+    {
+      "type": "table",
+      "title": "Readiness failures (pods out of rotation)",
+      "description": "",
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "cloudwatch"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cloudwatch"
+          },
+          "queryMode": "Logs",
+          "region": "default",
+          "id": "",
+          "logGroupNames": [
+            "/eks/__CLUSTER__/containers"
+          ],
+          "logGroups": [],
+          "expression": "fields @timestamp, @logStream, database, cache\n| filter service = \"realworld-api\" and msg = \"not ready: database check failed\"\n| sort @timestamp desc\n| limit 50",
+          "statsGroups": []
+        }
+      ],
+      "options": {
+        "showHeader": true
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 22,
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 7
       }
     },
     {
@@ -966,10 +1147,10 @@
         "defaults": {},
         "overrides": []
       },
-      "id": 20,
+      "id": 23,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 55,
         "w": 24,
         "h": 9
       }
@@ -1007,10 +1188,10 @@
         "defaults": {},
         "overrides": []
       },
-      "id": 21,
+      "id": 24,
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 64,
         "w": 24,
         "h": 9
       }
