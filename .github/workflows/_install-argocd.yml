@@ -64,7 +64,8 @@ jobs:
       - name: Open the tunnel to the Kubernetes API
         run: |
           scripts/eks-tunnel.sh "${{ inputs.env }}" "${{ inputs.region }}" > /tmp/tunnel.env
-          cat /tmp/tunnel.env >> "$GITHUB_ENV"   # KUBECONFIG and TUNNEL_PID for later steps (no secrets)
+          # KUBECONFIG and TUNNEL_PID for later steps (no secrets); $GITHUB_ENV takes NAME=value, without "export".
+          sed 's/^export //' /tmp/tunnel.env >> "$GITHUB_ENV"
 
       - name: ArgoCD repository credentials (from Secrets Manager)
         run: |
