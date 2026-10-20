@@ -3,15 +3,15 @@
 # commit) and the images (realworld-api:<revision>, realworld-api:migrate-<revision>). Rollback = revert the bump.
 repoURL: git@github.com:gabrielguernik/realworld-app.git
 chartPath: deploy/chart
-revision: f7705d553ba84f4211030c4394b852b3e7189090
+revision: 9214283b76c99e1154ddfccd20aa5a07ec4f9d1c
 namespace: realworld
 values:
   image:
     repository: 965140467182.dkr.ecr.us-east-1.amazonaws.com/realworld-api
   replicas: 2
   resources:
-    requests: { cpu: 100m, memory: 128Mi }
-    limits: { memory: 256Mi }
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 256Mi}
   secrets:
     roleArn: arn:aws:iam::965140467182:role/irsa/sandbox-us-east-1-secrets-realworld
     region: us-east-1
