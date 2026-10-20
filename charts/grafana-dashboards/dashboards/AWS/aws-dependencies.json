@@ -17,31 +17,6 @@
   "templating": {
     "list": [
       {
-        "name": "lb",
-        "label": "Load balancer",
-        "type": "query",
-        "datasource": {
-          "type": "cloudwatch",
-          "uid": "cloudwatch"
-        },
-        "refresh": 2,
-        "regex": "",
-        "includeAll": false,
-        "multi": false,
-        "current": {},
-        "options": [],
-        "hide": 0,
-        "query": {
-          "queryType": "dimensionValues",
-          "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "RequestCount",
-          "dimensionKey": "LoadBalancer",
-          "dimensionFilters": {},
-          "refId": "CloudWatchVariableQueryEditor-VariableQuery"
-        }
-      },
-      {
         "name": "cache",
         "label": "Valkey node",
         "type": "query",
@@ -82,7 +57,7 @@
   "panels": [
     {
       "type": "row",
-      "title": "ALB: is it the load balancer or the targets?",
+      "title": "ALB: is it the load balancer or the targets? (every ALB in the account with data in the time range)",
       "collapsed": false,
       "panels": [],
       "id": 1,
@@ -110,20 +85,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "RequestCount",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "requests",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Sum",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "requests",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RequestCount\"', 'Sum')"
         }
       ],
       "fieldConfig": {
@@ -179,20 +152,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "HTTPCode_ELB_5XX_Count",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "ALB 5xx (no healthy target, timeouts)",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Sum",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "ALB 5xx (no healthy target, timeouts)",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_ELB_5XX_Count\"', 'Sum')"
         },
         {
           "refId": "B",
@@ -202,20 +173,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "HTTPCode_Target_5XX_Count",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "target 5xx (the API answered 5xx)",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Sum",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "target 5xx (the API answered 5xx)",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"HTTPCode_Target_5XX_Count\"', 'Sum')"
         }
       ],
       "fieldConfig": {
@@ -271,20 +240,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "TargetResponseTime",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "p50",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "p50",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "p50",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"TargetResponseTime\"', 'p50')"
         },
         {
           "refId": "B",
@@ -294,20 +261,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "TargetResponseTime",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "p95",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "p95",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "p95",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"TargetResponseTime\"', 'p95')"
         }
       ],
       "fieldConfig": {
@@ -363,21 +328,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "HealthyHostCount",
-          "dimensions": {
-            "LoadBalancer": "$lb",
-            "TargetGroup": "*"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "healthy",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Minimum",
           "period": "",
-          "matchExact": false,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "healthy",
-          "sqlExpression": ""
+          "sqlExpression": "",
+          "matchExact": true,
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer,TargetGroup} MetricName=\"HealthyHostCount\"', 'Minimum')"
         },
         {
           "refId": "B",
@@ -387,21 +349,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "UnHealthyHostCount",
-          "dimensions": {
-            "LoadBalancer": "$lb",
-            "TargetGroup": "*"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "unhealthy",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Maximum",
           "period": "",
-          "matchExact": false,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "unhealthy",
-          "sqlExpression": ""
+          "sqlExpression": "",
+          "matchExact": true,
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer,TargetGroup} MetricName=\"UnHealthyHostCount\"', 'Maximum')"
         }
       ],
       "fieldConfig": {
@@ -457,20 +416,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "RejectedConnectionCount",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "rejected",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Sum",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "rejected",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"RejectedConnectionCount\"', 'Sum')"
         },
         {
           "refId": "B",
@@ -480,20 +437,18 @@
           },
           "queryMode": "Metrics",
           "region": "default",
-          "namespace": "AWS/ApplicationELB",
-          "metricName": "ClientTLSNegotiationErrorCount",
-          "dimensions": {
-            "LoadBalancer": "$lb"
-          },
+          "metricQueryType": 0,
+          "metricEditorMode": 1,
+          "id": "",
+          "label": "client TLS errors",
+          "namespace": "",
+          "metricName": "",
+          "dimensions": {},
           "statistic": "Sum",
           "period": "",
+          "sqlExpression": "",
           "matchExact": true,
-          "metricQueryType": 0,
-          "metricEditorMode": 0,
-          "id": "",
-          "expression": "",
-          "label": "client TLS errors",
-          "sqlExpression": ""
+          "expression": "SEARCH('{AWS/ApplicationELB,LoadBalancer} MetricName=\"ClientTLSNegotiationErrorCount\"', 'Sum')"
         }
       ],
       "fieldConfig": {
