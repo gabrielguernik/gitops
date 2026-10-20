@@ -23,6 +23,19 @@ jobs:
       - name: db-bootstrap chart
         run: |
           helm lint charts/db-bootstrap --set roleArn=x,dbInstanceArn=y,roleSecrets.app=a,roleSecrets.migrator=m
+      - name: ApplicationSet templatePatch renders valid YAML for every app config
+        # Renders the patch with Helm's engine (same Go templates and Sprig functions as ArgoCD; .x → .Values.x).
+        run: |
+          mkdir -p /tmp/tp/templates && printf 'apiVersion: v2\nname: tp\nversion: 0.0.1\n' > /tmp/tp/Chart.yaml
+          rc=0
+          for set in clusters/*/apps/applicationset.yaml; do
+            yq '.spec.templatePatch' "$set" | sed 's/{{ \./{{ .Values./g; s/{{- with \./{{- with .Values./g' > /tmp/tp/templates/p.yaml
+            for f in "$(dirname "$set")"/config/*.yaml; do
+              helm template x /tmp/tp -f "$f" | yq -e '.spec.source.helm.valuesObject.revision' > /dev/null \
+                || { echo "$f: templatePatch does not render"; rc=1; }
+            done
+          done
+          exit $rc
       - name: App configs have the generator's keys
         run: |
           rc=0
