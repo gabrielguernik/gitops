@@ -18,7 +18,9 @@ less automated, because environments change far more often than new ones are cre
   _install-argocd.yml        # reusable job: tunnel → repo credentials → helm upgrade → root Applications
   checks.yml                 # PRs and main: lint + "do the AWS resources this folder references exist?"
 charts/
-  db-bootstrap/              # platform-owned chart, released as git tags db-bootstrap-v<version>
+  db-bootstrap/              # platform-owned charts, each released as git tags <chart>-v<version>
+  monitoring-config/         #   secrets plumbing of the monitoring namespace (Grafana admin)
+  grafana-dashboards/        #   dashboards/<Folder>/<name>.json → ConfigMaps for Grafana's sidecar
 clusters/
   sandbox-us-east-1/         # one folder per cluster; cluster = environment (+ region)
     argocd/
@@ -32,6 +34,11 @@ clusters/
       external-dns.yaml
       reloader.yaml
       db-bootstrap.yaml
+      monitoring-config.yaml # observability: secrets for Grafana
+      alloy.yaml             #   scrapes annotated pods + the API's ALB metrics → Amazon Managed Prometheus
+      grafana.yaml           #   dashboards over AMP, CloudWatch and CloudWatch Logs (private)
+      fluent-bit.yaml        #   container logs → CloudWatch Logs
+      grafana-dashboards.yaml
     apps/
       applicationset.yaml    # app-of-apps: one Application per file in config/
       config/
@@ -61,7 +68,8 @@ EKS, RDS, IAM roles   ──▶  helm upgrade argocd                ──▶  r
    ArgoCD doesn't manage its own release), and on demand.
 2. **The `platform` root** syncs `clusters/<cluster>/platform/`. Every component is an explicit Application with
    its chart version and its configuration written out in the file. Sync waves order them: projects (-10), cert-manager
-   (-6), then the controllers (-5), then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
+   (-6), then the controllers (-5), observability (`monitoring-config` -3; Alloy, Grafana, Fluent Bit -2; dashboards -1),
+   then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
    for the previous one to be healthy.
 3. **The `apps` root** syncs only `apps/applicationset.yaml`. The ApplicationSet's git files generator turns each
    `apps/config/<app>.yaml` into an Application named `<app>`, in the AppProject `apps`.
@@ -79,8 +87,12 @@ names that survive rebuilding the infrastructure, never by generated IDs:
 | ExternalDNS | Zone by domain, `sandbox.gg-incode.click` |
 | SecretStores | Secrets by name, `sandbox/realworld/{app,db-app,db-migrator}`; the DB secrets include host, port and database |
 | db-bootstrap | RDS instance ARN (deterministic); its RDS-managed master secret is found by its `aws:rds:primaryDBInstanceArn` tag |
+| Fluent Bit | Log group by name, `/eks/sandbox-us-east-1/containers` |
+| Alloy | The API's ALB by the tags the load balancer controller sets (`ingress.k8s.aws/stack`), not by its ARN |
+| Alloy, Grafana | **The AMP workspace ID** (`ws-…`): the one generated ID. It changes when the infra `monitoring` stack is recreated; then update it in both files (`aws ssm get-parameter --name /<env>/<region>/monitoring/amp_workspace_id`) |
 
-`scripts/check-cluster-config.sh <cluster>` resolves every one of these in AWS. CI runs it on every PR and on
+`scripts/check-cluster-config.sh <cluster>` resolves every one of these in AWS (for the workspace: it exists, it's the
+same ID in every file, and its alias is the cluster name). CI runs it on every PR and on
 `main` with the read-only role `ci/gitops-check`, so a reference that no longer exists fails a PR instead of a sync.
 
 ## Applications and how to deploy
@@ -104,7 +116,7 @@ read deploy key for it (Secrets Manager `<env>/argocd/repo-<name>`, written by t
 loop in `_install-argocd.yml`). **Removing an app:** delete the file; ArgoCD deletes the Application and its resources.
 
 **What the `apps` project allows:** sources `gitops` and `realworld-app` only; any namespace except the platform
-ones (`kube-system`, `argocd`, `external-secrets`, `external-dns`, `reloader`, `db-admin`); no cluster-scoped
+ones (`kube-system`, `argocd`, `external-secrets`, `external-dns`, `reloader`, `db-admin`, `monitoring`, `logging`); no cluster-scoped
 resources except Namespaces. An app can't install CRDs, cluster roles or webhooks.
 
 ## Database roles (`db-bootstrap`)
@@ -143,6 +155,23 @@ needed). The pipeline runs on merge.
    `checks.yml`; `scripts/check-cluster-config.sh <cluster>` must pass.
 5. Add a job to `argocd.yml`.
 
+**Change a dashboard:** edit a copy in Grafana, export it (Share → Export, keeping the data source UIDs `amp` and
+`cloudwatch`), save it as `charts/grafana-dashboards/dashboards/<Folder>/<name>.json`, bump the chart `version`, tag
+`grafana-dashboards-v<version>`, then update `targetRevision` in each cluster's `platform/grafana-dashboards.yaml`. Use
+`__CLUSTER__` where the JSON names the cluster (log group, RDS instance, Valkey nodes); the chart fills it in.
+
+**Make an app's metrics collected:** annotate its pods with `prometheus.io/scrape: "true"`, `prometheus.io/port` and
+`prometheus.io/path`. Alloy scrapes them into the cluster's AMP workspace.
+
+**Open Grafana** (private, like ArgoCD; the 3am runbook is in the infra README, "Observability"):
+
+```bash
+eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"
+kubectl -n monitoring port-forward svc/grafana 3000:80 &
+aws secretsmanager get-secret-value --secret-id sandbox/monitoring/grafana --query SecretString --output text | jq -r '."admin-password"'
+open http://localhost:3000                              # user admin
+```
+
 **Open the ArgoCD UI** (the API is private; see the infra README for the tunnel prerequisites):
 
 ```bash
@@ -177,3 +206,6 @@ kill "$TUNNEL_PID"
 - **Per-cluster files are duplicated.** Intentional, so upgrades go one environment at a time;
   `diff-clusters.sh` shows the differences between environments.
 - **One repo for every cluster.** Prod may move prod clusters to a repo with stricter branch protection.
+- **Grafana runs in the cluster it watches,** and dashboards are managed as exported JSON. Prod: Grafana in a separate
+  management cluster, and a friendlier dashboard workflow (Grafana Operator, or dashboards as code). See the infra
+  README, "Observability" → "Production".
