@@ -167,7 +167,7 @@ needed). The pipeline runs on merge.
 **Make an app's metrics collected:** annotate its pods with `prometheus.io/scrape: "true"`, `prometheus.io/port` and
 `prometheus.io/path`. Alloy scrapes them into the cluster's AMP workspace.
 
-**Open Grafana** (private, like ArgoCD; the 3am runbook is in the infra README, "Observability"):
+**Open Grafana** (private, like ArgoCD; the 3am runbook is in infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#3am-runbook)):
 
 ```bash
 eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"
@@ -176,7 +176,7 @@ aws secretsmanager get-secret-value --secret-id sandbox/monitoring/grafana --que
 open http://localhost:3000                              # user admin
 ```
 
-**Open the ArgoCD UI** (the API is private; see the infra README for the tunnel prerequisites):
+**Open the ArgoCD UI** (the API is private; tunnel prerequisites in infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#1-prerequisites-once)):
 
 ```bash
 eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"      # tunnel + KUBECONFIG
@@ -189,7 +189,7 @@ kill "$TUNNEL_PID"                                      # when done
 ## Removing an environment
 
 Controllers create AWS resources that Terraform doesn't know about (the ALB, its target groups, DNS records). Remove
-the apps first so the controllers delete them, then destroy the infrastructure (infra README, "Destroy order"):
+the apps first so the controllers delete them, then destroy the infrastructure (infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#destroy-order-environment-between-work-sessions)):
 
 ```bash
 eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"
