@@ -3,7 +3,7 @@
 # commit) and the images (realworld-api:<revision>, realworld-api:migrate-<revision>). Rollback = revert the bump.
 repoURL: git@github.com:gabrielguernik/realworld-app.git
 chartPath: deploy/chart
-revision: dcf32ae6ca3a1721b5bcec22f347a0df8e195152
+revision: 9112e197dda9467cb0d9582f6b2b3a847d01b520
 namespace: realworld
 values:
   image:
