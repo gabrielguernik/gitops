@@ -91,8 +91,11 @@ names that survive rebuilding the infrastructure, never by generated IDs:
 | Alloy | The API's ALB by the tags the load balancer controller sets (`ingress.k8s.aws/stack`), not by its ARN |
 | Alloy, Grafana | **The AMP workspace ID** (`ws-…`): the one generated ID. It changes when the infra `monitoring` stack is recreated; then update it in both files (`aws ssm get-parameter --name /<env>/<region>/monitoring/amp_workspace_id`) |
 
-`scripts/check-cluster-config.sh <cluster>` resolves every one of these in AWS (for the workspace: it exists, it's the
-same ID in every file, and its alias is the cluster name). CI runs it on every PR and on
+`scripts/check-cluster-config.sh <cluster>` resolves these in AWS: roles, VPC, security groups, secrets, the RDS
+instance and its master secret, certificates for the ingress hosts, the workspace (it exists, it's the same ID in every
+file, and its alias is the cluster name) and the log group. It also checks that Alloy's ALB filter names the app's
+namespace. It doesn't check the ExternalDNS zone, the access-log bucket, or that each role trusts the right
+ServiceAccount. CI runs it on every PR and on
 `main` with the read-only role `ci/gitops-check`, so a reference that no longer exists fails a PR instead of a sync.
 
 ## Applications and how to deploy
@@ -178,7 +181,7 @@ open http://localhost:3000                              # user admin
 ```bash
 eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"      # tunnel + KUBECONFIG
 kubectl -n argocd port-forward svc/argocd-server 8080:443 &
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+aws secretsmanager get-secret-value --secret-id sandbox/argocd/sandbox-us-east-1/admin --query SecretString --output text; echo
 open https://localhost:8080                             # user admin
 kill "$TUNNEL_PID"                                      # when done
 ```

@@ -25,11 +25,11 @@ jobs:
         # changed since its current version's tag must get a new version.
         run: |
           rc=0
-          for ref in $(grep -rhoE 'targetRevision: [a-z-]+-v[0-9]+\.[0-9]+\.[0-9]+' clusters | awk '{print $2}' | sort -u); do
+          while read -r ref; do
             chart="${ref%-v*}"; version="${ref##*-v}"
             if ! git rev-parse -q --verify "refs/tags/$ref" > /dev/null; then echo "$ref: tag missing"; rc=1; continue; fi
             [ "$(git show "$ref:charts/$chart/Chart.yaml" | yq .version)" = "$version" ] || { echo "$ref: Chart.yaml version differs"; rc=1; }
-          done
+          done < <(grep -rhoE 'targetRevision: [a-z-]+-v[0-9]+\.[0-9]+\.[0-9]+' clusters | awk '{print $2}' | sort -u)
           for dir in charts/*/; do
             chart="$(basename "$dir")"; tag="$chart-v$(yq .version "$dir/Chart.yaml")"
             if git rev-parse -q --verify "refs/tags/$tag" > /dev/null && ! git diff --quiet "$tag" -- "$dir"; then
@@ -89,4 +89,6 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::965140467182:role/ci/gitops-check
           aws-region: us-east-1
-      - run: scripts/check-cluster-config.sh ${{ matrix.cluster }}
+      - env:
+          CLUSTER: ${{ matrix.cluster }}
+        run: scripts/check-cluster-config.sh "$CLUSTER"
