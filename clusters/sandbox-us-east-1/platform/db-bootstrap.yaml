@@ -17,7 +17,7 @@ spec:
   source:
     repoURL: git@github.com:gabrielguernik/gitops.git
     path: charts/db-bootstrap
-    targetRevision: db-bootstrap-v1.0.0 # charts shared by clusters are pinned per cluster by git tag
+    targetRevision: db-bootstrap-v1.0.1 # charts shared by clusters are pinned per cluster by git tag
     helm:
       valuesObject:
         region: us-east-1

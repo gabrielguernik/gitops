@@ -72,5 +72,10 @@ for lg in $(docs | grep -oE '/eks/[A-Za-z0-9_.-]+/containers' | sort -u); do
     --query "length(logGroups[?logGroupName=='$lg'])")" = 1
 done
 
+echo "Alloy's ALB filter matches the apps' namespaces (ingress.k8s.aws/stack = <namespace>/<ingress>)"
+for stack in $(grep -ohE '"ingress.k8s.aws/stack" = "[^"]+"' "$dir"/platform/*.yaml | sed -E 's/.*= "([^"]+)"/\1/' | sort -u); do
+  check "stack $stack" grep -qx "namespace: ${stack%%/*}" "$dir"/apps/config/*.yaml
+done
+
 if (( failures > 0 )); then echo "$failures reference(s) don't resolve in AWS"; exit 1; fi
 echo "all references resolve"

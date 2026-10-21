@@ -85,9 +85,13 @@ spec:
                 jsonData:
                   authType: default
                   defaultRegion: us-east-1
+        # Grafana only reads dashboard ConfigMaps in its own namespace: a Role, not a ClusterRole with Secrets.
+        rbac:
+          namespaced: true
         sidecar:
           dashboards:
             enabled: true
+            resource: configmap
             label: grafana_dashboard
             labelValue: "1"
             folderAnnotation: grafana_folder # set by the grafana-dashboards chart

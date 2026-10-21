@@ -68,8 +68,8 @@ EKS, RDS, IAM roles   ──▶  helm upgrade argocd                ──▶  r
    ArgoCD doesn't manage its own release), and on demand.
 2. **The `platform` root** syncs `clusters/<cluster>/platform/`. Every component is an explicit Application with
    its chart version and its configuration written out in the file. Sync waves order them: projects (-10), cert-manager
-   (-6), then the controllers (-5), observability (`monitoring-config` -3; Alloy, Grafana, Fluent Bit -2; dashboards -1),
-   then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
+   (-6), then the controllers (-5), observability (`monitoring-config` -3; Alloy, Grafana, Fluent Bit -2), then dashboards and `db-bootstrap`
+   together (-1). ArgoCD's values add the Application health check so each wave waits
    for the previous one to be healthy.
 3. **The `apps` root** syncs only `apps/applicationset.yaml`. The ApplicationSet's git files generator turns each
    `apps/config/<app>.yaml` into an Application named `<app>`, in the AppProject `apps`.
@@ -91,8 +91,11 @@ names that survive rebuilding the infrastructure, never by generated IDs:
 | Alloy | The API's ALB by the tags the load balancer controller sets (`ingress.k8s.aws/stack`), not by its ARN |
 | Alloy, Grafana | **The AMP workspace ID** (`ws-…`): the one generated ID. It changes when the infra `monitoring` stack is recreated; then update it in both files (`aws ssm get-parameter --name /<env>/<region>/monitoring/amp_workspace_id`) |
 
-`scripts/check-cluster-config.sh <cluster>` resolves every one of these in AWS (for the workspace: it exists, it's the
-same ID in every file, and its alias is the cluster name). CI runs it on every PR and on
+`scripts/check-cluster-config.sh <cluster>` resolves these in AWS: roles, VPC, security groups, secrets, the RDS
+instance and its master secret, certificates for the ingress hosts, the workspace (it exists, it's the same ID in every
+file, and its alias is the cluster name) and the log group. It also checks that Alloy's ALB filter names the app's
+namespace. It doesn't check the ExternalDNS zone, the access-log bucket, or that each role trusts the right
+ServiceAccount. CI runs it on every PR and on
 `main` with the read-only role `ci/gitops-check`, so a reference that no longer exists fails a PR instead of a sync.
 
 ## Applications and how to deploy
@@ -111,13 +114,14 @@ same ID in every file, and its alias is the cluster name). CI runs it on every P
 pushes here. Rollback: revert that commit. The `realworld` chart runs migrations (as `realworld_migrator`) before
 rolling the pods (as `realworld_app`).
 
-**Adding an app:** add a config file. Its repo must be in the `apps` project's `sourceRepos`, and ArgoCD needs a
+**Adding an app:** add a config file. Its repo must be in the `apps` project's `sourceRepos` and its namespace in
+the project's `destinations`, and ArgoCD needs a
 read deploy key for it (Secrets Manager `<env>/argocd/repo-<name>`, written by the pipeline: add the name to the
 loop in `_install-argocd.yml`). **Removing an app:** delete the file; ArgoCD deletes the Application and its resources.
 
-**What the `apps` project allows:** sources `gitops` and `realworld-app` only; any namespace except the platform
-ones (`kube-system`, `argocd`, `external-secrets`, `external-dns`, `reloader`, `db-admin`, `monitoring`, `logging`); no cluster-scoped
-resources except Namespaces. An app can't install CRDs, cluster roles or webhooks.
+**What the `apps` project allows:** source `realworld-app` only; destination namespace `realworld` only (an
+allowlist, so a platform namespace added later is never reachable); no cluster-scoped resources except Namespaces.
+An app can't install CRDs, cluster roles or webhooks.
 
 ## Database roles (`db-bootstrap`)
 
@@ -177,7 +181,7 @@ open http://localhost:3000                              # user admin
 ```bash
 eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"      # tunnel + KUBECONFIG
 kubectl -n argocd port-forward svc/argocd-server 8080:443 &
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+aws secretsmanager get-secret-value --secret-id sandbox/argocd/sandbox-us-east-1/admin --query SecretString --output text; echo
 open https://localhost:8080                             # user admin
 kill "$TUNNEL_PID"                                      # when done
 ```

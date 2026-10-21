@@ -55,6 +55,9 @@ spec:
                 Tag kube.*
                 Mem_Buf_Limit 5MB
                 Skip_Long_Lines On
+                # Remembers file offsets across restarts, so lines written during an upgrade are still shipped.
+                DB /var/log/flb_kube.db
+                DB.locking true
           filters: |
             [FILTER]
                 Name kubernetes

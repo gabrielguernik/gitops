@@ -1,8 +1,13 @@
 -- Idempotent role setup, run as the RDS master user against the application database.
--- psql variables: app_user, app_password, migrator_user, migrator_password, app_connection_limit.
+-- Environment: APP_USER, APP_PASSWORD, MIGRATOR_USER, MIGRATOR_PASSWORD (from the role secrets, read with \getenv so
+-- they never appear on a command line). psql variable: app_connection_limit.
 -- (psql doesn't substitute variables inside DO blocks, so conditional DDL uses SELECT format(...) \gexec.)
 
 \set ON_ERROR_STOP on
+\getenv app_user APP_USER
+\getenv app_password APP_PASSWORD
+\getenv migrator_user MIGRATOR_USER
+\getenv migrator_password MIGRATOR_PASSWORD
 
 -- 1. Roles exist and have the current passwords.
 SELECT format('CREATE ROLE %I LOGIN', :'migrator_user')

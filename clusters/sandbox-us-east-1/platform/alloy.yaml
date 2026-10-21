@@ -36,6 +36,13 @@ spec:
             runAsGroup: 473
             fsGroup: 473
             seccompProfile: { type: RuntimeDefault }
+        # Only what pod discovery needs. The chart's default ClusterRole also reads every Secret and ConfigMap.
+        rbac:
+          rules:
+            - apiGroups: [""]
+              resources: ["pods", "namespaces"]
+              verbs: ["get", "list", "watch"]
+          clusterRules: []
         serviceAccount:
           create: true
           name: alloy

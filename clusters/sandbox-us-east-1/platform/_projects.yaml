@@ -35,22 +35,13 @@ metadata:
     argocd.argoproj.io/sync-wave: "-10"
 spec:
   description: >-
-    Workloads generated from apps/config/*.yaml. Only the listed repos, never platform namespaces,
-    and no cluster-scoped resources except the app's own Namespace.
+    Workloads generated from apps/config/*.yaml. Only the listed repos, only the listed app namespaces
+    (an allowlist: a new platform namespace can never be reached by an app), and no cluster-scoped resources except
+    the app's own Namespace.
   sourceRepos:
-    - git@github.com:gabrielguernik/gitops.git
     - git@github.com:gabrielguernik/realworld-app.git
   destinations:
-    - { server: https://kubernetes.default.svc, namespace: "!kube-system" }
-    - { server: https://kubernetes.default.svc, namespace: "!kube-public" }
-    - { server: https://kubernetes.default.svc, namespace: "!argocd" }
-    - { server: https://kubernetes.default.svc, namespace: "!external-secrets" }
-    - { server: https://kubernetes.default.svc, namespace: "!external-dns" }
-    - { server: https://kubernetes.default.svc, namespace: "!reloader" }
-    - { server: https://kubernetes.default.svc, namespace: "!db-admin" }
-    - { server: https://kubernetes.default.svc, namespace: "!monitoring" }
-    - { server: https://kubernetes.default.svc, namespace: "!logging" }
-    - { server: https://kubernetes.default.svc, namespace: "*" }
+    - { server: https://kubernetes.default.svc, namespace: realworld }
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
