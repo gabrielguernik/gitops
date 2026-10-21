@@ -114,7 +114,7 @@ jobs:
       - name: Close the tunnel
         if: always()
         run: |
-          if [[ -n "${TUNNEL_PID:-}" ]]; then kill "$TUNNEL_PID" 2>/dev/null || true; fi
+          if [[ -n "${TUNNEL_PID:-}" ]]; then kill -INT "$TUNNEL_PID" 2>/dev/null || true; fi
           for s in $(aws ssm describe-sessions --state Active \
                        --query "Sessions[?starts_with(SessionId, '${SESSION_NAME}')].SessionId" --output text); do
             aws ssm terminate-session --session-id "$s" > /dev/null && echo "terminated $s"

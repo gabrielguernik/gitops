@@ -5,7 +5,7 @@
 #   scripts/eks-tunnel.sh <env> <region> [local-port]    # default port 8443
 #
 # Prints shell assignments for KUBECONFIG and TUNNEL_PID on stdout (eval them); progress goes to stderr.
-# Stop the tunnel with: kill "$TUNNEL_PID"
+# Stop the tunnel with: kill -INT "$TUNNEL_PID" (TUNNEL_PID is the session-manager-plugin process)
 set -euo pipefail
 
 env="${1:?usage: eks-tunnel.sh <env> <region> [local-port]}"
@@ -25,6 +25,15 @@ status="$(aws ssm describe-instance-information --filters "Key=InstanceIds,Value
 [[ "$status" == "Online" ]] || { echo "bastion ${bastion} is not Online in Session Manager (${status})" >&2; exit 1; }
 
 log="$(mktemp)"
+# The port and the SSM session belong to session-manager-plugin, a child of `aws ssm start-session`. Killing `aws`
+# leaves the plugin running (port taken, session open); SIGINT to the plugin, like Ctrl-C, closes both.
+plugin_of() { pgrep -P "$1" -f session-manager-plugin || true; }
+stop_tunnel() {
+  local p
+  p="$(plugin_of "$1")"
+  if [[ -n "$p" ]]; then kill -INT "$p" 2>/dev/null || true; fi
+  kill "$1" 2>/dev/null || true
+}
 open_tunnel() {
   aws ssm start-session --target "$bastion" \
     --document-name AWS-StartPortForwardingSessionToRemoteHost \
@@ -35,7 +44,7 @@ open_tunnel() {
     kill -0 "$pid" 2>/dev/null || break
     sleep 1
   done
-  kill "$pid" 2>/dev/null || true
+  stop_tunnel "$pid"
   return 1
 }
 
@@ -51,12 +60,12 @@ KUBECONFIG="$kubeconfig" kubectl config set-cluster "$(KUBECONFIG="$kubeconfig" 
 # The API answers through the tunnel before we hand it over.
 for _ in $(seq 1 10); do
   if KUBECONFIG="$kubeconfig" kubectl --request-timeout=10s get --raw /readyz >/dev/null 2>&1; then
-    printf 'export KUBECONFIG=%q\nTUNNEL_PID=%q\n' "$kubeconfig" "$pid"
+    printf 'export KUBECONFIG=%q\nTUNNEL_PID=%q\n' "$kubeconfig" "$(plugin_of "$pid")"
     exit 0
   fi
   sleep 3
 done
 echo "Kubernetes API not reachable through the tunnel" >&2
 cat "$log" >&2
-kill "$pid" 2>/dev/null || true
+stop_tunnel "$pid"
 exit 1
