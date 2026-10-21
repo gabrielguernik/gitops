@@ -8,8 +8,9 @@ from="${1:?usage: diff-clusters.sh <from> <to>}"
 to="${2:?usage: diff-clusters.sh <from> <to>}"
 normalize() {
   local cluster="$1" env="${1%%-*}"
-  sed -e "s/${cluster}/<cluster>/g" -e "s/\b${env}\b/<env>/g" -e "s/arn:aws:\([a-z-]*\):\([a-z0-9-]*\):[0-9]\{12\}:/arn:aws:\1:\2:<account>:/g" \
-      -e "s/[0-9]\{12\}\.dkr/<account>.dkr/g" -e "s/logs-[0-9]\{12\}-/logs-<account>-/g"
+  # perl, not sed: macOS sed has no \b word boundaries.
+  perl -pe "s/\Q${cluster}\E/<cluster>/g; s/\b\Q${env}\E\b/<env>/g; s/arn:aws:([a-z-]*):([a-z0-9-]*):[0-9]{12}:/arn:aws:\1:\2:<account>:/g;
+            s/[0-9]{12}\.dkr/<account>.dkr/g; s/logs-[0-9]{12}-/logs-<account>-/g"
 }
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 for c in "$from" "$to"; do

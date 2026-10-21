@@ -68,8 +68,8 @@ EKS, RDS, IAM roles   ──▶  helm upgrade argocd                ──▶  r
    ArgoCD doesn't manage its own release), and on demand.
 2. **The `platform` root** syncs `clusters/<cluster>/platform/`. Every component is an explicit Application with
    its chart version and its configuration written out in the file. Sync waves order them: projects (-10), cert-manager
-   (-6), then the controllers (-5), observability (`monitoring-config` -3; Alloy, Grafana, Fluent Bit -2; dashboards -1),
-   then `db-bootstrap` (-1). ArgoCD's values add the Application health check so each wave waits
+   (-6), then the controllers (-5), observability (`monitoring-config` -3; Alloy, Grafana, Fluent Bit -2), then dashboards and `db-bootstrap`
+   together (-1). ArgoCD's values add the Application health check so each wave waits
    for the previous one to be healthy.
 3. **The `apps` root** syncs only `apps/applicationset.yaml`. The ApplicationSet's git files generator turns each
    `apps/config/<app>.yaml` into an Application named `<app>`, in the AppProject `apps`.
@@ -111,13 +111,14 @@ same ID in every file, and its alias is the cluster name). CI runs it on every P
 pushes here. Rollback: revert that commit. The `realworld` chart runs migrations (as `realworld_migrator`) before
 rolling the pods (as `realworld_app`).
 
-**Adding an app:** add a config file. Its repo must be in the `apps` project's `sourceRepos`, and ArgoCD needs a
+**Adding an app:** add a config file. Its repo must be in the `apps` project's `sourceRepos` and its namespace in
+the project's `destinations`, and ArgoCD needs a
 read deploy key for it (Secrets Manager `<env>/argocd/repo-<name>`, written by the pipeline: add the name to the
 loop in `_install-argocd.yml`). **Removing an app:** delete the file; ArgoCD deletes the Application and its resources.
 
-**What the `apps` project allows:** sources `gitops` and `realworld-app` only; any namespace except the platform
-ones (`kube-system`, `argocd`, `external-secrets`, `external-dns`, `reloader`, `db-admin`, `monitoring`, `logging`); no cluster-scoped
-resources except Namespaces. An app can't install CRDs, cluster roles or webhooks.
+**What the `apps` project allows:** source `realworld-app` only; destination namespace `realworld` only (an
+allowlist, so a platform namespace added later is never reachable); no cluster-scoped resources except Namespaces.
+An app can't install CRDs, cluster roles or webhooks.
 
 ## Database roles (`db-bootstrap`)
 

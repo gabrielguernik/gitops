@@ -8,7 +8,6 @@ metadata:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     argocd.argoproj.io/sync-wave: "0"
-    checksum/sql: {{ .Files.Get "files/bootstrap.sql" | sha256sum }}
 spec:
   backoffLimit: 3
   activeDeadlineSeconds: 300
@@ -26,14 +25,9 @@ spec:
       containers:
         - name: psql
           image: {{ .Values.image }}
-          command: ["bash", "-c"]
-          args:
-            - >-
-              exec psql -X
-              -v app_user="$APP_USER" -v app_password="$APP_PASSWORD"
-              -v migrator_user="$MIGRATOR_USER" -v migrator_password="$MIGRATOR_PASSWORD"
-              -v app_connection_limit={{ int .Values.appConnectionLimit }}
-              -f /config/bootstrap.sql
+          # The role credentials stay in the environment (bootstrap.sql reads them with \getenv), never on the
+          # command line.
+          command: ["psql", "-X", "-v", "app_connection_limit={{ int .Values.appConnectionLimit }}", "-f", "/config/bootstrap.sql"]
           env:
             - { name: PGSSLMODE, value: verify-full }
             - { name: PGSSLROOTCERT, value: /config/rds-ca.pem }

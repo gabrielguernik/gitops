@@ -22,9 +22,17 @@ spec:
         reloader:
           watchGlobally: true
           deployment:
+            containerSecurityContext: # the chart sets none; needed for the namespace's restricted Pod Security level
+              allowPrivilegeEscalation: false
+              capabilities: { drop: [ALL] }
+              readOnlyRootFilesystem: true
             resources:
               requests: { cpu: 10m, memory: 32Mi }
               limits: { memory: 128Mi }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/warn: restricted

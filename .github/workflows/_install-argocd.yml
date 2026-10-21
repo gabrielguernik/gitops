@@ -31,6 +31,7 @@ permissions:
 
 env:
   SSM_PLUGIN_VERSION: 1.2.835.0
+  SSM_PLUGIN_SHA256: 7c6dcad12518571cc7959a713e6a8ae1bdf6ed66fd9bee37dc189e39ca58ae03 # of the ubuntu_64bit .deb
 
 jobs:
   install:
@@ -43,6 +44,7 @@ jobs:
     timeout-minutes: 20
     env:
       CLUSTER: ${{ inputs.env }}-${{ inputs.region }}
+      ENV_NAME: ${{ inputs.env }}
       AWS_REGION: ${{ inputs.region }}
       SESSION_NAME: argocd-${{ inputs.env }}-${{ inputs.region }}-${{ github.run_id }}
     steps:
@@ -58,12 +60,13 @@ jobs:
         run: |
           curl -fsSL -o /tmp/ssm.deb \
             "https://s3.amazonaws.com/session-manager-downloads/plugin/${SSM_PLUGIN_VERSION}/ubuntu_64bit/session-manager-plugin.deb"
+          echo "${SSM_PLUGIN_SHA256}  /tmp/ssm.deb" | sha256sum -c -
           sudo dpkg -i /tmp/ssm.deb
           session-manager-plugin --version
 
       - name: Open the tunnel to the Kubernetes API
         run: |
-          scripts/eks-tunnel.sh "${{ inputs.env }}" "${{ inputs.region }}" > /tmp/tunnel.env
+          scripts/eks-tunnel.sh "$ENV_NAME" "$AWS_REGION" > /tmp/tunnel.env
           # KUBECONFIG and TUNNEL_PID for later steps (no secrets); $GITHUB_ENV takes NAME=value, without "export".
           sed 's/^export //' /tmp/tunnel.env >> "$GITHUB_ENV"
 
@@ -71,20 +74,25 @@ jobs:
         run: |
           kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
           for repo in gitops realworld-app; do
-            aws secretsmanager get-secret-value --secret-id "${{ inputs.env }}/argocd/repo-${repo}" \
+            aws secretsmanager get-secret-value --secret-id "${ENV_NAME}/argocd/repo-${repo}" \
               --query SecretString --output text \
             | jq '{apiVersion: "v1", kind: "Secret",
                    metadata: {name: "repo-\($repo)", namespace: "argocd",
                               labels: {"argocd.argoproj.io/secret-type": "repository"}},
                    stringData: {type: "git", url: .url, sshPrivateKey: .sshPrivateKey}}' --arg repo "$repo" \
-            | kubectl apply -f - > /dev/null
+            | kubectl apply --server-side --force-conflicts --field-manager=argocd-install -f - > /dev/null
+            # Server-side apply keeps no copy of the object in an annotation. Drop the one left by the client-side
+            # applies of earlier runs: it held the private key in plain text.
+            kubectl -n argocd annotate secret "repo-${repo}" kubectl.kubernetes.io/last-applied-configuration- > /dev/null
             echo "repo-${repo}: applied"
           done
 
       - name: Install or upgrade ArgoCD
+        env:
+          CHART_VERSION: ${{ inputs.argocd_chart_version }}
         run: |
           helm upgrade --install argocd argo-cd \
-            --repo https://argoproj.github.io/argo-helm --version "${{ inputs.argocd_chart_version }}" \
+            --repo https://argoproj.github.io/argo-helm --version "$CHART_VERSION" \
             --namespace argocd -f "clusters/${CLUSTER}/argocd/values.yaml" \
             --wait --timeout 10m
           kubectl -n argocd get deploy,statefulset
