@@ -170,7 +170,7 @@ needed). The pipeline runs on merge.
 **Open Grafana** (private, like ArgoCD; the 3am runbook is in infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#3am-runbook)):
 
 ```bash
-eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"
+out=$(scripts/eks-tunnel.sh sandbox us-east-1) && eval "$out"   # stops if the tunnel fails
 kubectl -n monitoring port-forward svc/grafana 3000:80 &
 aws secretsmanager get-secret-value --secret-id sandbox/monitoring/grafana --query SecretString --output text | jq -r '."admin-password"'
 open http://localhost:3000                              # user admin
@@ -179,11 +179,11 @@ open http://localhost:3000                              # user admin
 **Open the ArgoCD UI** (the API is private; tunnel prerequisites in infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#1-prerequisites-once)):
 
 ```bash
-eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"      # tunnel + KUBECONFIG
+out=$(scripts/eks-tunnel.sh sandbox us-east-1) && eval "$out"   # tunnel + KUBECONFIG; stops if it fails
 kubectl -n argocd port-forward svc/argocd-server 8080:443 &
 aws secretsmanager get-secret-value --secret-id sandbox/argocd/sandbox-us-east-1/admin --query SecretString --output text; echo
 open https://localhost:8080                             # user admin
-kill "$TUNNEL_PID"                                      # when done
+kill -INT "$TUNNEL_PID"                                      # when done
 ```
 
 ## Removing an environment
@@ -192,12 +192,12 @@ Controllers create AWS resources that Terraform doesn't know about (the ALB, its
 the apps first so the controllers delete them, then destroy the infrastructure (infra [docs/operations.md](https://github.com/gabrielguernik/infra/blob/main/docs/operations.md#destroy-order-environment-between-work-sessions)):
 
 ```bash
-eval "$(scripts/eks-tunnel.sh sandbox us-east-1)"
-kubectl -n argocd delete application apps          # the root first (no finalizer), or it would recreate the ApplicationSet
-kubectl -n argocd delete applicationset apps        # its Applications go, and their finalizers delete Ingress → ALB, DNS records
-kubectl -n argocd wait --for=delete application/realworld --timeout=5m   # one per app in apps/config/
+out=$(scripts/eks-tunnel.sh sandbox us-east-1) && eval "$out"   # stops if the tunnel fails
+kubectl --context sandbox-us-east-1 -n argocd delete application apps        # the root first (no finalizer), or it would recreate the ApplicationSet
+kubectl --context sandbox-us-east-1 -n argocd delete applicationset apps     # its Applications go, and their finalizers delete Ingress → ALB, DNS records
+kubectl --context sandbox-us-east-1 -n argocd wait --for=delete application/realworld --timeout=5m   # one per app in apps/config/
 aws elbv2 describe-load-balancers --query "LoadBalancers[?starts_with(LoadBalancerName, 'k8s-')].LoadBalancerName"  # must be []
-kill "$TUNNEL_PID"
+kill -INT "$TUNNEL_PID"
 ```
 
 ## Trade-offs and prod upgrades
